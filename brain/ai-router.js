@@ -16,8 +16,8 @@ const MODEL_REASON = process.env.MODEL_REASON || "deepseek-r1:32b"
 const MODEL_EMBED  = process.env.MODEL_EMBED  || "nomic-embed-text"
 
 // Per-model timeout budgets. Small = fast; Big = patient.
-const TIMEOUT_FAST   = 30_000
-const TIMEOUT_REASON = 300_000   // 5 min — 32B can take time, but n8n cron wraps around this
+const TIMEOUT_FAST   = 90_000
+const TIMEOUT_REASON = 420_000   // 7 min on Windows or cold model starts
 const TIMEOUT_EMBED  = 20_000
 
 function pickModel(task, prompt) {
@@ -39,6 +39,7 @@ async function _call(model, prompt, timeout, opts = {}) {
     model,
     prompt,
     stream: false,
+    keep_alive: "30m",
     options: {
       temperature: opts.temperature ?? 0.7,
       num_predict: opts.maxTokens ?? 1024,
@@ -100,7 +101,7 @@ async function warmup() {
   console.log("[AI] warming model stack…")
   for (const m of [MODEL_FAST, MODEL_REASON]) {
     try {
-      await _call(m, "ok", m === MODEL_REASON ? 120_000 : 30_000, { maxTokens: 4 })
+      await _call(m, "ok", m === MODEL_REASON ? 180_000 : 90_000, { maxTokens: 4 })
       console.log(`[AI] ${m} ready`)
     } catch (e) { console.error(`[AI] ${m} warmup failed:`, e.message) }
   }
