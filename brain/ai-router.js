@@ -1,37 +1,75 @@
-// GSB-100 AI Router
-// Routes requests across a model stack so the 32B doesn't get called for everything.
-//
-//   fast     → qwen2.5:3b        classification, routing, short answers, JSON shaping
-//   reason   → deepseek-r1:32b   listing copy, investment analysis, strategy
-//   embed    → nomic-embed-text  vector memory
-//
-// Auto-routes by task hint OR by heuristics (token count, keywords).
-// Retries once on transient Ollama errors. Falls back fast→reason if fast returns empty.
 require("dotenv").config()
 const axios = require("axios")
 
 const OLLAMA = process.env.OLLAMA_HOST || "http://localhost:11434"
-const MODEL_FAST   = process.env.MODEL_FAST   || "qwen2.5:3b"
+const MODEL_FAST = process.env.MODEL_FAST || "qwen2.5:3b"
+const MODEL_FAST_BACKUP = process.env.MODEL_FAST_BACKUP || process.env.MODEL_REASON || "deepseek-r1:32b"
 const MODEL_REASON = process.env.MODEL_REASON || "deepseek-r1:32b"
-const MODEL_EMBED  = process.env.MODEL_EMBED  || "nomic-embed-text"
+const MODEL_EMBED = process.env.MODEL_EMBED || "nomic-embed-text"
 
-// Per-model timeout budgets. Small = fast; Big = patient.
-const TIMEOUT_FAST   = 90_000
-const TIMEOUT_REASON = 420_000   // 7 min on Windows or cold model starts
-const TIMEOUT_EMBED  = 20_000
+const TIMEOUT_FAST = 45_000
+const TIMEOUT_REASON = 420_000
+const TIMEOUT_EMBED = 20_000
+const FAST_FAIL_COOLDOWN_MS = 30 * 60 * 1000
 
-function pickModel(task, prompt) {
-  if (task === "fast") return { model: MODEL_FAST, timeout: TIMEOUT_FAST }
-  if (task === "reason") return { model: MODEL_REASON, timeout: TIMEOUT_REASON }
-  if (task === "embed") return { model: MODEL_EMBED, timeout: TIMEOUT_EMBED }
-  // Heuristic auto-routing
-  const lower = (prompt || "").toLowerCase()
-  const needsReasoning =
+const state = {
+  unhealthyUntil: {},
+}
+
+function now() {
+  return Date.now()
+}
+
+function isCoolingDown(model) {
+  return (state.unhealthyUntil[model] || 0) > now()
+}
+
+function markUnhealthy(model, reason) {
+  state.unhealthyUntil[model] = now() + FAST_FAIL_COOLDOWN_MS
+  console.warn(`[AI] ${model} cooling down for ${FAST_FAIL_COOLDOWN_MS / 60000}m: ${reason}`)
+}
+
+function clearUnhealthy(model) {
+  delete state.unhealthyUntil[model]
+}
+
+function tinyPrompt(prompt = "") {
+  const text = String(prompt).trim()
+  return text.length > 0 && text.length <= 80
+}
+
+function needsReasoning(prompt = "") {
+  const lower = prompt.toLowerCase()
+  return (
     prompt.length > 600 ||
     /analyze|strategy|draft|write a|generate \d+ ideas|investment|proforma|compare|argue|pros and cons/i.test(lower)
-  return needsReasoning
-    ? { model: MODEL_REASON, timeout: TIMEOUT_REASON }
-    : { model: MODEL_FAST, timeout: TIMEOUT_FAST }
+  )
+}
+
+function pickModel(task, prompt) {
+  if (task === "embed") return { model: MODEL_EMBED, timeout: TIMEOUT_EMBED, kind: "embed" }
+  if (task === "reason") return { model: MODEL_REASON, timeout: TIMEOUT_REASON, kind: "reason" }
+
+  if (task === "fast") {
+    if (!isCoolingDown(MODEL_FAST)) {
+      return { model: MODEL_FAST, timeout: TIMEOUT_FAST, kind: "fast" }
+    }
+    return { model: MODEL_FAST_BACKUP, timeout: TIMEOUT_REASON, kind: "fast-backup" }
+  }
+
+  if (needsReasoning(prompt)) {
+    return { model: MODEL_REASON, timeout: TIMEOUT_REASON, kind: "reason" }
+  }
+
+  if (!isCoolingDown(MODEL_FAST)) {
+    return {
+      model: MODEL_FAST,
+      timeout: tinyPrompt(prompt) ? Math.min(TIMEOUT_FAST, 20_000) : TIMEOUT_FAST,
+      kind: "fast",
+    }
+  }
+
+  return { model: MODEL_FAST_BACKUP, timeout: TIMEOUT_REASON, kind: "fast-backup" }
 }
 
 async function _call(model, prompt, timeout, opts = {}) {
@@ -39,85 +77,135 @@ async function _call(model, prompt, timeout, opts = {}) {
     model,
     prompt,
     stream: false,
-    keep_alive: "30m",
+    keep_alive: opts.keepAlive || "30m",
     options: {
       temperature: opts.temperature ?? 0.7,
       num_predict: opts.maxTokens ?? 1024,
     },
   }
-  const r = await axios.post(`${OLLAMA}/api/generate`, body, { timeout })
-  return (r.data?.response || "").trim()
+
+  const response = await axios.post(`${OLLAMA}/api/generate`, body, { timeout })
+  return (response.data?.response || "").trim()
+}
+
+function isBadFastError(message = "") {
+  return /timeout|econnreset|socket hang up|connection aborted|503|500/i.test(message)
 }
 
 async function generate(prompt, opts = {}) {
   const { task, retry = true } = opts
-  const { model, timeout } = pickModel(task, prompt)
-  const start = Date.now()
+  const chosen = pickModel(task, prompt)
+  const start = now()
+
   try {
-    let out = await _call(model, prompt, timeout, opts)
-    // If fast model returned garbage/empty, escalate to reasoning model once
-    if ((!out || out.length < 10) && model === MODEL_FAST && retry) {
-      console.log(`[AI] fast empty, escalating to ${MODEL_REASON}`)
+    let out = await _call(chosen.model, prompt, chosen.timeout, opts)
+
+    if (!out && chosen.kind === "fast" && retry) {
+      console.log(`[AI] ${chosen.model} returned empty, escalating to ${MODEL_REASON}`)
       out = await _call(MODEL_REASON, prompt, TIMEOUT_REASON, opts)
+      const ms = now() - start
+      return { text: out, model: MODEL_REASON, ms, retried: true }
     }
-    const ms = Date.now() - start
-    console.log(`[AI] ${model} ${ms}ms ${out.length}ch`)
-    return { text: out, model, ms }
-  } catch (e) {
-    const ms = Date.now() - start
-    console.error(`[AI] ${model} FAIL ${ms}ms:`, e.message)
-    // One-shot retry on timeout/network; escalate fast→reason
-    if (retry) {
-      const next = model === MODEL_FAST ? MODEL_REASON : model
-      try {
-        const out = await _call(next, prompt, next === MODEL_REASON ? TIMEOUT_REASON : timeout, opts)
-        return { text: out, model: next, ms: Date.now() - start, retried: true }
-      } catch (e2) {
-        console.error(`[AI] retry FAIL:`, e2.message)
-        return { text: "", model: next, ms: Date.now() - start, error: e2.message }
-      }
+
+    clearUnhealthy(chosen.model)
+    const ms = now() - start
+    console.log(`[AI] ${chosen.model} ${ms}ms ${out.length}ch`)
+    return { text: out, model: chosen.model, ms }
+  } catch (error) {
+    const ms = now() - start
+    const message = error.message || String(error)
+    console.error(`[AI] ${chosen.model} FAIL ${ms}ms: ${message}`)
+
+    if (chosen.kind === "fast" && isBadFastError(message)) {
+      markUnhealthy(chosen.model, message)
     }
-    return { text: "", model, ms, error: e.message }
+
+    if (!retry) {
+      return { text: "", model: chosen.model, ms, error: message }
+    }
+
+    const fallbackModel = chosen.kind === "fast" ? MODEL_FAST_BACKUP : MODEL_REASON
+    const fallbackTimeout = fallbackModel === MODEL_REASON ? TIMEOUT_REASON : TIMEOUT_FAST
+
+    try {
+      console.log(`[AI] fallback to ${fallbackModel}`)
+      const out = await _call(fallbackModel, prompt, fallbackTimeout, opts)
+      const totalMs = now() - start
+      return { text: out, model: fallbackModel, ms: totalMs, retried: true }
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError.message || String(fallbackError)
+      console.error(`[AI] fallback FAIL: ${fallbackMessage}`)
+      return { text: "", model: fallbackModel, ms: now() - start, error: fallbackMessage }
+    }
   }
 }
 
 async function classify(prompt, labels) {
-  const p = `Classify this into exactly one label from: ${labels.join(", ")}\n\nInput: ${prompt}\n\nReply with only the label, nothing else.`
-  const { text } = await generate(p, { task: "fast", temperature: 0.1, maxTokens: 32 })
-  const match = labels.find(l => text.toLowerCase().includes(l.toLowerCase()))
+  const wrapped = `Classify this into exactly one label from: ${labels.join(", ")}\n\nInput: ${prompt}\n\nReply with only the label, nothing else.`
+  const { text } = await generate(wrapped, { task: "fast", temperature: 0.1, maxTokens: 32 })
+  const match = labels.find((label) => text.toLowerCase().includes(label.toLowerCase()))
   return match || labels[0]
 }
 
 async function json(prompt, schema) {
-  const p = `${prompt}\n\nReply with ONLY valid JSON matching this schema: ${JSON.stringify(schema)}\nNo prose, no markdown fences.`
-  const { text } = await generate(p, { task: "fast", temperature: 0.2, maxTokens: 1024 })
+  const wrapped = `${prompt}\n\nReply with ONLY valid JSON matching this schema: ${JSON.stringify(schema)}\nNo prose, no markdown fences.`
+  const { text } = await generate(wrapped, { task: "fast", temperature: 0.2, maxTokens: 512 })
   try {
     const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()
     return JSON.parse(cleaned)
-  } catch { return null }
-}
-
-async function warmup() {
-  console.log("[AI] warming model stack…")
-  for (const m of [MODEL_FAST, MODEL_REASON]) {
-    try {
-      await _call(m, "ok", m === MODEL_REASON ? 180_000 : 90_000, { maxTokens: 4 })
-      console.log(`[AI] ${m} ready`)
-    } catch (e) { console.error(`[AI] ${m} warmup failed:`, e.message) }
+  } catch {
+    return null
   }
 }
 
-module.exports = { generate, classify, json, warmup, MODEL_FAST, MODEL_REASON, MODEL_EMBED }
+async function warmup() {
+  console.log("[AI] warming model stack...")
+  const models = [MODEL_FAST, MODEL_REASON].filter((value, index, array) => array.indexOf(value) === index)
+  for (const model of models) {
+    try {
+      const timeout = model === MODEL_REASON ? 180_000 : 30_000
+      await _call(model, "ok", timeout, { maxTokens: 4, temperature: 0 })
+      clearUnhealthy(model)
+      console.log(`[AI] ${model} ready`)
+    } catch (error) {
+      console.error(`[AI] ${model} warmup failed:`, error.message)
+      if (model === MODEL_FAST) markUnhealthy(model, error.message)
+    }
+  }
+}
+
+module.exports = {
+  generate,
+  classify,
+  json,
+  warmup,
+  MODEL_FAST,
+  MODEL_FAST_BACKUP,
+  MODEL_REASON,
+  MODEL_EMBED,
+}
 
 if (require.main === module) {
-  (async () => {
-    console.log("[AI ROUTER] Self-test…")
-    const a = await generate("What is 2+2?")
-    console.log("fast:", a.model, a.text.slice(0, 80))
-    const b = await generate("Analyze the Utah commercial real estate market for Q2 2026. Consider vacancy rates, interest rates, and local migration patterns. Give me 3 actionable strategies.")
-    console.log("reason:", b.model, b.text.slice(0, 200))
-    const c = await classify("This property sits on a main arterial near downtown", ["residential", "commercial", "industrial"])
-    console.log("classify:", c)
+  ;(async () => {
+    console.log("[AI ROUTER] Self-test...")
+    const fast = await generate("What is 2+2? Reply with one number only.", {
+      task: "fast",
+      temperature: 0,
+      maxTokens: 8,
+    })
+    console.log("fast:", fast.model, fast.text.slice(0, 80) || "(empty)", fast.error || "")
+
+    const reason = await generate(
+      "Analyze the Utah commercial real estate market for Q2 2026. Consider vacancy rates, interest rates, and local migration patterns. Give me 3 actionable strategies.",
+      { task: "reason", maxTokens: 300 }
+    )
+    console.log("reason:", reason.model, reason.text.slice(0, 200) || "(empty)", reason.error || "")
+
+    const picked = await classify(
+      "This property sits on a main arterial near downtown",
+      ["residential", "commercial", "industrial"]
+    )
+    console.log("classify:", picked)
     process.exit(0)
   })()
 }
