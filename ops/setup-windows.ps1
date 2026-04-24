@@ -50,7 +50,7 @@ try {
 
 # 4. Pull model stack
 Say "4/7  Pulling model stack (first run can take several minutes)"
-$models = @("qwen2.5:3b","deepseek-r1:32b","nomic-embed-text")
+$models = @("llama3.2:3b","deepseek-r1:32b","nomic-embed-text")
 foreach ($m in $models) {
   $list = (ollama list 2>$null | Out-String)
   if ($list -match [regex]::Escape($m)) {

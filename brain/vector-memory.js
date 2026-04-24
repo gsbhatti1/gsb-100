@@ -8,16 +8,30 @@ const axios = require("axios")
 const OLLAMA = process.env.OLLAMA_HOST || "http://localhost:11434"
 const EMBED_MODEL = process.env.EMBED_MODEL || "nomic-embed-text"
 const CHROMA = process.env.CHROMA_HOST || "http://localhost:8000"
+const ENABLED = process.env.VECTOR_MEMORY_ENABLED !== "0"
 const TENANT = "default_tenant"
 const DATABASE = "default_database"
+const CHROMA_TIMEOUT_MS = 1500
+const CHROMA_COOLDOWN_MS = 10 * 60 * 1000
 
 let collectionCache = {}
+let chromaUnavailableUntil = 0
+
+function chromaAvailable() {
+  return ENABLED && Date.now() >= chromaUnavailableUntil
+}
+
+function markChromaUnavailable(reason) {
+  chromaUnavailableUntil = Date.now() + CHROMA_COOLDOWN_MS
+  console.error(`[CHROMA] cooling down for ${CHROMA_COOLDOWN_MS / 60000}m:`, reason)
+}
 
 async function embed(text) {
+  if (!chromaAvailable()) return null
   try {
     const r = await axios.post(`${OLLAMA}/api/embeddings`, {
       model: EMBED_MODEL, prompt: text
-    }, { timeout: 30000 })
+    }, { timeout: 10000 })
     return r.data.embedding
   } catch (e) {
     console.error("[EMBED]", e.message)
@@ -26,6 +40,7 @@ async function embed(text) {
 }
 
 async function getCollection(name) {
+  if (!chromaAvailable()) return null
   if (collectionCache[name]) return collectionCache[name]
   try {
     // v2 API — ensure collection exists
@@ -34,17 +49,18 @@ async function getCollection(name) {
       name,
       metadata: { "hnsw:space": "cosine" },
       get_or_create: true,
-    }, { timeout: 5000 })
+    }, { timeout: CHROMA_TIMEOUT_MS })
     collectionCache[name] = r.data.id
     return r.data.id
   } catch (e) {
-    console.error(`[CHROMA] collection ${name} unavailable:`, e.message)
+    markChromaUnavailable(`collection ${name} unavailable: ${e.message}`)
     return null
   }
 }
 
 // Record a memory — any text with optional metadata
 async function remember(collection, text, metadata = {}) {
+  if (!chromaAvailable()) return false
   const cid = await getCollection(collection)
   if (!cid) return false
   const vector = await embed(text)
@@ -59,16 +75,17 @@ async function remember(collection, text, metadata = {}) {
         documents: [text],
         metadatas: [{ ...metadata, ts: new Date().toISOString() }],
       },
-      { timeout: 5000 }
+      { timeout: CHROMA_TIMEOUT_MS }
     )
     return id
   } catch (e) {
-    console.error("[CHROMA] add failed:", e.message); return false
+    markChromaUnavailable(`add failed: ${e.message}`); return false
   }
 }
 
 // Semantic search — return top k similar memories
 async function recall(collection, query, k = 5) {
+  if (!chromaAvailable()) return []
   const cid = await getCollection(collection)
   if (!cid) return []
   const vector = await embed(query)
@@ -77,14 +94,14 @@ async function recall(collection, query, k = 5) {
     const r = await axios.post(
       `${CHROMA}/api/v2/tenants/${TENANT}/databases/${DATABASE}/collections/${cid}/query`,
       { query_embeddings: [vector], n_results: k },
-      { timeout: 5000 }
+      { timeout: CHROMA_TIMEOUT_MS }
     )
     const docs = r.data.documents?.[0] || []
     const metas = r.data.metadatas?.[0] || []
     const dists = r.data.distances?.[0] || []
     return docs.map((d, i) => ({ text: d, meta: metas[i], similarity: 1 - (dists[i] || 0) }))
   } catch (e) {
-    console.error("[CHROMA] query failed:", e.message); return []
+    markChromaUnavailable(`query failed: ${e.message}`); return []
   }
 }
 

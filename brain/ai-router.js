@@ -2,7 +2,7 @@ require("dotenv").config()
 const axios = require("axios")
 
 const OLLAMA = process.env.OLLAMA_HOST || "http://localhost:11434"
-const MODEL_FAST = process.env.MODEL_FAST || "qwen2.5:3b"
+const MODEL_FAST = process.env.MODEL_FAST || "llama3.2:3b"
 const MODEL_FAST_BACKUP = process.env.MODEL_FAST_BACKUP || process.env.MODEL_REASON || "deepseek-r1:32b"
 const MODEL_REASON = process.env.MODEL_REASON || "deepseek-r1:32b"
 const MODEL_EMBED = process.env.MODEL_EMBED || "nomic-embed-text"
@@ -73,11 +73,16 @@ function pickModel(task, prompt) {
 }
 
 async function _call(model, prompt, timeout, opts = {}) {
+  const keepAlive =
+    opts.keepAlive ||
+    (model === MODEL_REASON ? "2m" : model === MODEL_FAST ? "30m" : "15m")
+
   const body = {
     model,
     prompt,
     stream: false,
-    keep_alive: opts.keepAlive || "30m",
+    keep_alive: keepAlive,
+    think: opts.think ?? false,
     options: {
       temperature: opts.temperature ?? 0.7,
       num_predict: opts.maxTokens ?? 1024,
@@ -160,10 +165,10 @@ async function json(prompt, schema) {
 
 async function warmup() {
   console.log("[AI] warming model stack...")
-  const models = [MODEL_FAST, MODEL_REASON].filter((value, index, array) => array.indexOf(value) === index)
+  const models = [MODEL_FAST].filter((value, index, array) => array.indexOf(value) === index)
   for (const model of models) {
     try {
-      const timeout = model === MODEL_REASON ? 180_000 : 30_000
+      const timeout = 30_000
       await _call(model, "ok", timeout, { maxTokens: 4, temperature: 0 })
       clearUnhealthy(model)
       console.log(`[AI] ${model} ready`)
@@ -196,8 +201,8 @@ if (require.main === module) {
     console.log("fast:", fast.model, fast.text.slice(0, 80) || "(empty)", fast.error || "")
 
     const reason = await generate(
-      "Analyze the Utah commercial real estate market for Q2 2026. Consider vacancy rates, interest rates, and local migration patterns. Give me 3 actionable strategies.",
-      { task: "reason", maxTokens: 300 }
+      "Write one short sentence describing Utah commercial real estate conditions in 2026.",
+      { task: "reason", temperature: 0.2, maxTokens: 48, think: false }
     )
     console.log("reason:", reason.model, reason.text.slice(0, 200) || "(empty)", reason.error || "")
 
