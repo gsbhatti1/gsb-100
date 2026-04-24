@@ -7,9 +7,10 @@ const { humanDelay } = require("../browser/playwright-config")
 const ai = require("../brain/ai-router")
 const vm = require("../brain/vector-memory")
 const obs = require("../brain/observe")
+const { createScheduledAgent } = require("../brain/agent-runtime")
 
 async function run() {
-  console.log("\n[LISTING AGENT] Starting —", new Date().toISOString())
+  console.log("\n[LISTING AGENT] Starting -", new Date().toISOString())
   const start = Date.now()
   try {
     const db = await getDb()
@@ -20,13 +21,15 @@ async function run() {
     console.log(`[LISTING AGENT] ${rows.length} pending | ${activeRows.length} active`)
 
     for (const row of rows) {
-      const address = row[1], type = row[2], price = row[3]
+      const address = row[1]
+      const type = row[2]
+      const price = row[3]
 
       await obs.trace({ agent: "listing-agent", input: address }, async ({ span, score }) => {
         await checkBeforeActing(`listing-${type}`)
         const pastFailures = await vm.failures.recall(`listing ${type} property priced ${price}`, 3)
         if (pastFailures.length) {
-          console.log("[VAULT] Semantic lessons:", pastFailures.map(f => f.text.slice(0, 80)).join(" | "))
+          console.log("[VAULT] Semantic lessons:", pastFailures.map((f) => f.text.slice(0, 80)).join(" | "))
           span("vault-recall", { output: JSON.stringify(pastFailures), ms: 0 })
         }
 
@@ -37,7 +40,7 @@ async function run() {
         span("tone-pick", { output: tone, model: ai.MODEL_FAST })
 
         const lessons = pastFailures.length
-          ? `\n\nPast lessons to avoid:\n${pastFailures.map(f => "- " + f.text).join("\n")}`
+          ? `\n\nPast lessons to avoid:\n${pastFailures.map((f) => "- " + f.text).join("\n")}`
           : ""
 
         const { text: copy, model, ms } = await ai.generate(
@@ -69,17 +72,24 @@ async function run() {
     const msg = `GSB-100 Listing: ${rows.length} processed, ${activeRows.length} active. ${dur}s.`
     console.log("[LISTING AGENT]", msg)
     await sendAlert(msg)
-  } catch (err) {
+  } catch (error) {
     await recordFailure({
       context: "listing-agent",
-      whatHappened: err.message,
+      whatHappened: error.message,
       rootCause: "runtime",
       neverDo: "check logs/listing-err.log",
       platform: "all",
       severity: "high",
     })
-    try { await vm.failures.remember(`Listing agent crashed: ${err.message}`, { context: "listing-agent" }) } catch {}
-    await sendAlert(`GSB-100 ALERT: Listing agent — ${err.message}`)
+    try {
+      await vm.failures.remember(`Listing agent crashed: ${error.message}`, { context: "listing-agent" })
+    } catch {}
+    await sendAlert(`GSB-100 ALERT: Listing agent - ${error.message}`)
   }
 }
-run()
+
+createScheduledAgent({
+  name: "LISTING AGENT",
+  schedule: "0 7 * * *",
+  run,
+})

@@ -7,9 +7,10 @@ const { humanDelay } = require("../browser/playwright-config")
 const ai = require("../brain/ai-router")
 const vm = require("../brain/vector-memory")
 const obs = require("../brain/observe")
+const { createScheduledAgent } = require("../brain/agent-runtime")
 
 async function run() {
-  console.log("\n[BUYER AGENT] Starting —", new Date().toISOString())
+  console.log("\n[BUYER AGENT] Starting -", new Date().toISOString())
   try {
     const buyers = await getActiveBuyers()
     console.log(`[BUYER AGENT] ${buyers.length} active buyers`)
@@ -18,13 +19,13 @@ async function run() {
       const criteria = JSON.parse(buyer.criteria_json || "{}")
 
       await obs.trace({ agent: "buyer-agent", input: buyer.name }, async ({ span, score }) => {
-        const priorNotes = await vm.clients.recall(
-          `${buyer.name} ${JSON.stringify(criteria)}`, 5
-        )
-        if (priorNotes.length) span("prior-context", { output: priorNotes.map(n => n.text).join(" | ").slice(0, 500), ms: 0 })
+        const priorNotes = await vm.clients.recall(`${buyer.name} ${JSON.stringify(criteria)}`, 5)
+        if (priorNotes.length) {
+          span("prior-context", { output: priorNotes.map((n) => n.text).join(" | ").slice(0, 500), ms: 0 })
+        }
 
         const priorBlock = priorNotes.length
-          ? `\nPrior context for this buyer:\n${priorNotes.map(n => "- " + n.text).join("\n")}\n`
+          ? `\nPrior context for this buyer:\n${priorNotes.map((n) => "- " + n.text).join("\n")}\n`
           : ""
 
         const prompt = `You are a Utah real estate buyer agent. Client: ${buyer.name}. Needs: ${JSON.stringify(criteria)}.${priorBlock}
@@ -54,15 +55,20 @@ For each: the exact filter set, the signal to watch, and a 1-line match rational
     const msg = `GSB-100 Buyer: ${buyers.length} buyer(s) processed.`
     console.log("[BUYER AGENT]", msg)
     await sendAlert(msg)
-  } catch (err) {
+  } catch (error) {
     await recordFailure({
       context: "buyer-agent",
-      whatHappened: err.message,
+      whatHappened: error.message,
       rootCause: "runtime",
       neverDo: "check logs/buyer-err.log",
       platform: "all",
     })
-    await sendAlert(`GSB-100 ALERT: Buyer agent — ${err.message}`)
+    await sendAlert(`GSB-100 ALERT: Buyer agent - ${error.message}`)
   }
 }
-run()
+
+createScheduledAgent({
+  name: "BUYER AGENT",
+  schedule: "0 6 * * *",
+  run,
+})
