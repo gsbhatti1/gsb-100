@@ -1,0 +1,16 @@
+[Unit]
+Description=GSB-100 R&D Scanner
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/usr/bin/node agents/rnd-scanner.js
+StandardOutput=append:/opt/gsb-100/logs/rnd.log
+StandardError=append:/opt/gsb-100/logs/rnd-err.log
+
+[Install]
+WantedBy=multi-user.target

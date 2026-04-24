@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GSB-100 health check every 15 min
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=gsb-100-health.service
+
+[Install]
+WantedBy=timers.target

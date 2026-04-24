@@ -1,0 +1,16 @@
+[Unit]
+Description=GSB-100 Listing Agent
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/usr/bin/node agents/listing-agent.js
+StandardOutput=append:/opt/gsb-100/logs/listing.log
+StandardError=append:/opt/gsb-100/logs/listing-err.log
+
+[Install]
+WantedBy=multi-user.target

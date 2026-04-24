@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GSB-100 Listing Agent daily at 07:00
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+Unit=gsb-100-listing.service
+
+[Install]
+WantedBy=timers.target

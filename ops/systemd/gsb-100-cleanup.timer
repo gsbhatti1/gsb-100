@@ -1,0 +1,10 @@
+[Unit]
+Description=GSB-100 cleanup daily at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=gsb-100-cleanup.service
+
+[Install]
+WantedBy=timers.target

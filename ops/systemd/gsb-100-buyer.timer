@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GSB-100 Buyer Agent daily at 06:00
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=gsb-100-buyer.service
+
+[Install]
+WantedBy=timers.target

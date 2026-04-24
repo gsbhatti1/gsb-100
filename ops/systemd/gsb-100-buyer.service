@@ -1,0 +1,16 @@
+[Unit]
+Description=GSB-100 Buyer Agent
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/usr/bin/node agents/buyer-agent.js
+StandardOutput=append:/opt/gsb-100/logs/buyer.log
+StandardError=append:/opt/gsb-100/logs/buyer-err.log
+
+[Install]
+WantedBy=multi-user.target

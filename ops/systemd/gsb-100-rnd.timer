@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GSB-100 R&D Scanner weekly Fri 08:00
+
+[Timer]
+OnCalendar=Fri *-*-* 08:00:00
+Persistent=true
+Unit=gsb-100-rnd.service
+
+[Install]
+WantedBy=timers.target

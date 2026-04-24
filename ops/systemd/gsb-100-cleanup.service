@@ -1,0 +1,12 @@
+[Unit]
+Description=GSB-100 Daily Cleanup
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/bin/bash /opt/gsb-100/ops/cleanup.sh
+
+[Install]
+WantedBy=multi-user.target

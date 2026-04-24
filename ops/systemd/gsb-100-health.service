@@ -1,0 +1,12 @@
+[Unit]
+Description=GSB-100 Health Check
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/bin/bash /opt/gsb-100/ops/health-check.sh
+
+[Install]
+WantedBy=multi-user.target

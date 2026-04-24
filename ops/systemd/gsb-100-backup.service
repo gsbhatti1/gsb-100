@@ -1,0 +1,12 @@
+[Unit]
+Description=GSB-100 Nightly Backup to Backblaze B2
+
+[Service]
+Type=oneshot
+User=gsb
+WorkingDirectory=/opt/gsb-100
+EnvironmentFile=/opt/gsb-100/.env
+ExecStart=/bin/bash /opt/gsb-100/ops/backup.sh
+
+[Install]
+WantedBy=multi-user.target

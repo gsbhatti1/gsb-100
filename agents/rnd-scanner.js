@@ -1,21 +1,88 @@
-﻿require("dotenv").config()
-const{saveKnowledge,saveIdea,getNewIdeas}=require("../brain/memory-store")
-const{sendAlert}=require("../notifications/alert")
-const axios=require("axios")
-const TOPICS=["Utah commercial real estate 2026","SLC office vacancy rates","AppFolio alternatives property management","real estate AI tools 2026","Utah residential inventory prices","commercial leasing retail industrial Utah","real estate investment Utah ROI","Utah broker competitor analysis"]
-async function ai(prompt){try{const r=await axios.post(`${process.env.OLLAMA_HOST}/api/generate`,{model:process.env.OLLAMA_MODEL||"deepseek-r1:32b",prompt,stream:false},{timeout:180000});return r.data.response}catch(e){console.error("[AI]",e.message);return null}}
-async function run(){
-  console.log("\n[R&D SCANNER] Starting —",new Date().toISOString())
-  for(const t of TOPICS){await saveKnowledge(t,`Scanned ${new Date().toDateString()}`,"weekly-rnd");process.stdout.write(".")}
-  console.log(`\n[R&D] ${TOPICS.length} topics logged`)
-  console.log("[R&D] Generating ideas with local DeepSeek AI...")
-  const ideas=await ai(`You are the strategic brain for GBS Realty (gsbrealtor.com) Salt Lake City Utah. Date: ${new Date().toDateString()}.\n\nGenerate 3 high-value business ideas.\nFor each:\nIDEA: [title]\nWHY: [why it matters for Utah 2026]\nDIFFICULTY: [Easy/Medium/Complex]\nSTEPS: [3 actions]\n---\nThink big. Be specific to Utah real estate.`)
-  if(ideas){
-    await saveIdea(`Ideas ${new Date().toDateString()}`,ideas.substring(0,2000),"Local DeepSeek AI","varies","Review and pick one","rnd-weekly")
-    console.log("\n[R&D] IDEAS GENERATED:\n",ideas.substring(0,600))
-  }
-  const all=await getNewIdeas()
-  const msg=`GSB-100 R&D: ${TOPICS.length} topics scanned. ${all.length} ideas in database.`
-  console.log("[R&D]",msg);await sendAlert(msg)
+require("dotenv").config()
+const fs = require("fs")
+const { saveKnowledge, saveIdea, getNewIdeas } = require("../brain/memory-store")
+const { sendAlert } = require("../notifications/alert")
+const ai = require("../brain/ai-router")
+const vm = require("../brain/vector-memory")
+const obs = require("../brain/observe")
+
+const TOPICS = [
+  "Utah commercial real estate 2026",
+  "SLC office vacancy rates",
+  "AppFolio alternatives property management",
+  "real estate AI tools 2026",
+  "Utah residential inventory prices",
+  "commercial leasing retail industrial Utah",
+  "real estate investment Utah ROI",
+  "Utah broker competitor analysis",
+]
+
+async function run() {
+  console.log("\n[R&D SCANNER] Starting —", new Date().toISOString())
+
+  await obs.trace({ agent: "rnd-scanner", input: `weekly-scan-${new Date().toDateString()}` },
+  async ({ span, score }) => {
+    for (const t of TOPICS) {
+      await saveKnowledge(t, `Scanned ${new Date().toDateString()}`, "weekly-rnd")
+      await vm.market.remember(`R&D topic scanned: ${t}`, { topic: t })
+      process.stdout.write(".")
+    }
+    console.log(`\n[R&D] ${TOPICS.length} topics logged`)
+    span("topics", { output: TOPICS.join(", "), ms: 0 })
+
+    const marketContext = await vm.market.recall("Utah real estate opportunities 2026", 8)
+    const failureContext = await vm.failures.recall("real estate idea didn't work", 3)
+
+    const contextBlock = [
+      marketContext.length ? "Prior market observations:\n" + marketContext.map(m => "- " + m.text).join("\n") : "",
+      failureContext.length ? "Failed ideas to avoid:\n" + failureContext.map(f => "- " + f.text).join("\n") : "",
+    ].filter(Boolean).join("\n\n")
+
+    console.log("[R&D] Generating ideas with reasoning model…")
+    const prompt = `You are the strategic brain for GBS Realty (gsbrealtor.com) Salt Lake City Utah. Date: ${new Date().toDateString()}.
+
+${contextBlock ? contextBlock + "\n\n" : ""}Generate 3 high-value business ideas.
+For each:
+IDEA: [title]
+WHY: [why it matters for Utah 2026]
+DIFFICULTY: [Easy/Medium/Complex]
+STEPS: [3 actions]
+---
+Think big. Be specific to Utah real estate. Avoid repeats of failed ideas above.`
+
+    const { text: ideas, model, ms } = await ai.generate(prompt, { task: "reason", maxTokens: 1400 })
+    span("ideas", { output: (ideas || "").slice(0, 1000), model, ms })
+
+    if (ideas && ideas.length > 50) {
+      await saveIdea(
+        `Ideas ${new Date().toDateString()}`,
+        ideas.substring(0, 2000),
+        `Generated via ${model}`,
+        "varies",
+        "Review Friday, pick top 1",
+        "rnd-weekly"
+      )
+      const chunks = ideas.split(/---+/).map(s => s.trim()).filter(c => c.length > 30)
+      for (const c of chunks) {
+        await vm.market.remember(`R&D idea ${new Date().toDateString()}: ${c.slice(0, 500)}`, { week: new Date().toDateString() })
+      }
+      console.log("\n[R&D] IDEAS:\n", ideas.substring(0, 600))
+      score(0.85, "ideas generated and parsed")
+    } else {
+      score(0.1, "empty or too-short ideas output")
+    }
+
+    const all = await getNewIdeas()
+    const msg = `GSB-100 R&D: ${TOPICS.length} topics, ${all.length} ideas in DB. ${model} ${ms}ms.`
+    console.log("[R&D]", msg)
+    fs.mkdirSync("logs", { recursive: true })
+    fs.writeFileSync("logs/last-rnd-run.txt", new Date().toISOString())
+    await sendAlert(msg)
+  })
 }
-run()
+run().catch(async e => {
+  console.error("[R&D] crashed:", e.message)
+  try { await vm.failures.remember(`R&D scanner crashed: ${e.message}`, { context: "rnd-scanner" }) } catch {}
+  await sendAlert(`GSB-100 ALERT: R&D scanner — ${e.message}`).catch(() => {})
+  process.exit(1)
+})
