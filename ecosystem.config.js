@@ -22,12 +22,25 @@ module.exports = {
       error_file: "logs/rnd-err.log",
     },
     {
+      name: "email-agent",
+      script: "./agents/email-agent.js",
+      autorestart: true,
+      out_file: "logs/email.log",
+      error_file: "logs/email-err.log",
+    },
+    {
       name: "garbage-collect",
       script: "./ops/garbage-collect.js",
-      cron_restart: "0 3 * * *",
-      autorestart: false,
+      autorestart: true,
       out_file: "logs/gc.log",
       error_file: "logs/gc-err.log",
+    },
+    {
+      name: "weekly-digest",
+      script: "./agents/weekly-digest.js",
+      autorestart: true,
+      out_file: "logs/weekly.log",
+      error_file: "logs/weekly-err.log",
     },
   ],
 }

@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "gsb-100",
   "version": "1.0.0",
   "description": "GSB 100-Year Real Estate Brain",
@@ -6,15 +6,22 @@
     "start": "node agents/listing-agent.js",
     "buyer": "node agents/buyer-agent.js",
     "rnd": "node agents/rnd-scanner.js",
+    "email": "node agents/email-agent.js",
     "test-alert": "node notifications/alert.js",
     "test-db": "node brain/memory-store.js",
     "test-ai": "node brain/test-local-ai.js",
-    "chat": "node local-ai-chat.js"
+    "chat": "node local-ai-chat.js",
+    "gc": "node ops/garbage-collect.js --run-now",
+    "digest": "node notifications/mission-control.js digest",
+    "digest-preview": "node notifications/mission-control.js preview",
+    "mc-test": "node notifications/mission-control.js test"
   },
   "dependencies": {
     "sql.js": "^1.12.0",
     "dotenv": "^16.4.5",
     "axios": "^1.6.8",
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.2",
     "nodemailer": "^6.9.13",
     "node-cron": "^3.0.3",
     "winston": "^3.13.0",
