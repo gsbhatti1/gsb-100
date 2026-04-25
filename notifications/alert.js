@@ -13,8 +13,8 @@ const transporter = hasEmail
     })
   : null
 
-async function sendTelegram(msg) {
-  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+async function sendTelegram(msg, chatId = process.env.TELEGRAM_CHAT_ID) {
+  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId) {
     throw new Error("Telegram is not configured")
   }
 
@@ -22,7 +22,7 @@ async function sendTelegram(msg) {
   await axios.post(
     url,
     {
-      chat_id: process.env.TELEGRAM_CHAT_ID,
+      chat_id: chatId,
       text: msg,
     },
     { timeout: 15000 }
@@ -76,7 +76,7 @@ async function sendEmail({ to, subject, html, text }) {
   }
 }
 
-module.exports = { sendAlert, sendEmail }
+module.exports = { sendAlert, sendEmail, sendTelegram }
 
 if (require.main === module) {
   sendAlert("GSB-100 ONLINE: System alive. Local AI running on your machine.")

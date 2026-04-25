@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node agents/listing-agent.js",
     "buyer": "node agents/buyer-agent.js",
+    "desk": "node agents/deal-desk-agent.js",
+    "nnn": "node agents/nnn-scout-agent.js",
     "rnd": "node agents/rnd-scanner.js",
     "email": "node agents/email-agent.js",
     "test-alert": "node notifications/alert.js",

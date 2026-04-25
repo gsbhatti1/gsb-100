@@ -15,6 +15,20 @@ module.exports = {
       error_file: "logs/buyer-err.log",
     },
     {
+      name: "deal-desk-agent",
+      script: "./agents/deal-desk-agent.js",
+      autorestart: true,
+      out_file: "logs/deal-desk.log",
+      error_file: "logs/deal-desk-err.log",
+    },
+    {
+      name: "nnn-scout-agent",
+      script: "./agents/nnn-scout-agent.js",
+      autorestart: true,
+      out_file: "logs/nnn.log",
+      error_file: "logs/nnn-err.log",
+    },
+    {
       name: "rnd-scanner",
       script: "./agents/rnd-scanner.js",
       autorestart: true,
