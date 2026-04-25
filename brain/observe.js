@@ -110,7 +110,14 @@ async function trace({ agent, input }, fn) {
   const id = startTrace({ agent, input })
   try {
     const out = await fn({ traceId: id, span: (name, data) => span(id, { name, ...data }), score: (v, r) => score(id, v, r) })
-    await endTrace(id, { output: typeof out === "string" ? out : JSON.stringify(out).slice(0, 2000), success: true })
+    let serialized = ""
+    if (typeof out === "string") {
+      serialized = out.slice(0, 2000)
+    } else if (out !== undefined && out !== null) {
+      try { serialized = (JSON.stringify(out) || "").slice(0, 2000) }
+      catch { serialized = String(out).slice(0, 2000) }
+    }
+    await endTrace(id, { output: serialized, success: true })
     return out
   } catch (e) {
     await endTrace(id, { output: `ERROR: ${e.message}`, success: false })

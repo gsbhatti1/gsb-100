@@ -6,6 +6,7 @@
     "start": "node agents/listing-agent.js",
     "buyer": "node agents/buyer-agent.js",
     "desk": "node agents/deal-desk-agent.js",
+    "gsb": "node agents/gsb-realtor-agent.js",
     "nnn": "node agents/nnn-scout-agent.js",
     "rnd": "node agents/rnd-scanner.js",
     "email": "node agents/email-agent.js",
@@ -17,7 +18,9 @@
     "buyers": "node ops/generate-buyer-dashboard.js",
     "digest": "node notifications/mission-control.js digest",
     "digest-preview": "node notifications/mission-control.js preview",
-    "mc-test": "node notifications/mission-control.js test"
+    "mc-test": "node notifications/mission-control.js test",
+    "elections-watchdog": "node agents/elections-watchdog.js",
+    "elections-watchdog-once": "node agents/elections-watchdog.js"
   },
   "dependencies": {
     "sql.js": "^1.12.0",

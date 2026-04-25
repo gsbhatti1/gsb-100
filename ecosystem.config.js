@@ -22,6 +22,13 @@ module.exports = {
       error_file: "logs/deal-desk-err.log",
     },
     {
+      name: "gsb-realtor-agent",
+      script: "./agents/gsb-realtor-agent.js",
+      autorestart: true,
+      out_file: "logs/gsb-realtor.log",
+      error_file: "logs/gsb-realtor-err.log",
+    },
+    {
       name: "nnn-scout-agent",
       script: "./agents/nnn-scout-agent.js",
       autorestart: true,

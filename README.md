@@ -223,3 +223,11 @@ gsb-100/
 ---
 
 The hardware gets replaced. The knowledge lives forever.
+
+---
+
+## New in vNext
+
+- `agents/gsb-realtor-agent.js` powers website lead intake on `http://localhost:8787`
+- `POST /webhooks/gsb-realtor/lead` stores/scans leads and writes reply drafts to `C:/gsb-100/data/lead-drafts`
+- Telegram gets alerted for hot leads and timed follow-ups
