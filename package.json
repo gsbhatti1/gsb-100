@@ -14,6 +14,7 @@
     "test-ai": "node brain/test-local-ai.js",
     "chat": "node local-ai-chat.js",
     "gc": "node ops/garbage-collect.js --run-now",
+    "buyers": "node ops/generate-buyer-dashboard.js",
     "digest": "node notifications/mission-control.js digest",
     "digest-preview": "node notifications/mission-control.js preview",
     "mc-test": "node notifications/mission-control.js test"

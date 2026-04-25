@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSB-100 Buyer Tracker</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --line: #dbe3ea;
+        --ink: #102033;
+        --muted: #617487;
+        --blue: #0e6ba8;
+        --green: #1a8f5a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #eef4f9 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      .wrap {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+      .hero {
+        background: var(--card);
+        border: 1px solid var(--line);
+        padding: 22px 24px;
+        margin-bottom: 18px;
+        box-shadow: 0 10px 30px rgba(16, 32, 51, 0.06);
+      }
+      .title {
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .sub {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .table-wrap {
+        background: var(--card);
+        border: 1px solid var(--line);
+        overflow: auto;
+        box-shadow: 0 10px 30px rgba(16, 32, 51, 0.06);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1300px;
+      }
+      th, td {
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+        text-align: left;
+        font-size: 13px;
+        line-height: 19px;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        background: #f8fbfd;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      .buyer-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .buyer-meta {
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .footer {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .empty {
+        padding: 24px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div class="title">GSB-100 Buyer Tracker</div>
+        <div class="sub">Track every buyer you add, their needs, and how many deals the system has found for them.</div>
+      </div>
+      <div class="table-wrap">
+        
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Buyer</th>
+              <th>Type</th>
+              <th>State / Area</th>
+              <th>Budget</th>
+              <th>Needs</th>
+              <th>Keywords</th>
+              <th>Status</th>
+              <th>Matches</th>
+              <th>Sent</th>
+              <th>Last Match</th>
+            </tr>
+          </thead>
+          <tbody>
+      <tr>
+        <td>2</td>
+        <td>
+          <div class="buyer-name">Hussain</div>
+          <div class="buyer-meta">- | -</div>
+        </td>
+        <td>commercial</td>
+        <td>Utah</td>
+        <td>-</td>
+        <td>strip plaza, Utah and Arizona, budget 0-5 million, newer than 2000</td>
+        <td>strip, plaza, Utah, and, Arizona, budget, 0-5, million, newer, than, 2000</td>
+        <td>Active</td>
+        <td>0</td>
+        <td>0</td>
+        <td>-</td>
+      </tr>
+    
+      <tr>
+        <td>1</td>
+        <td>
+          <div class="buyer-name">Test Buyer</div>
+          <div class="buyer-meta">+18015551234 | test@test.com</div>
+        </td>
+        <td>commercial</td>
+        <td>-</td>
+        <td>$1,000,000</td>
+        <td>-</td>
+        <td>-</td>
+        <td>Active</td>
+        <td>0</td>
+        <td>0</td>
+        <td>-</td>
+      </tr>
+    </tbody>
+        </table>
+      </div>
+      <div class="footer">Generated from C:/gsb-100/data/brain.db</div>
+    </div>
+  </body>
+</html>
